@@ -1,0 +1,15 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.env
+build/
+dist/
+
+config.yaml
+episodes/
+theodio.db
+*.log
+
+.pytest_cache/
+.ruff_cache/
