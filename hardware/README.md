@@ -129,16 +129,46 @@ To hit the all-day target reliably the software (Rust) will keep Wi‑Fi off
 during playback and sync feeds opportunistically — this is the realistic
 mode of use anyway (commute, walks, etc.).
 
-### 3.4 Storage
+### 3.4 Controls supplement — **Decided: EC11 rotary encoder w/ push**
+
+The Whisplay's onboard buttons cover infrequent actions via gestures, but
+volume and scrubbing-by-feel are too important for podcasts to leave to
+click-counting. A single EC11 rotary encoder with integrated push button
+adds continuous control with one extra enclosure cutout (a 7 mm round hole)
+and three GPIO.
+
+Wiring (EC11): A → GPIO 5, B → GPIO 6, Push → GPIO 13, common → GND.
+All three pins are in the spare-GPIO list, no conflict with the Whisplay
+HAT or the audio bus.
+
+Proposed control mapping:
+
+| Gesture                     | Action                         |
+|-----------------------------|--------------------------------|
+| Encoder rotate              | Volume ± (with on-screen indicator) |
+| Encoder held + rotate       | Scrub through current episode  |
+| Encoder click               | Play / Pause                   |
+| Encoder double-click        | Skip +30 s                     |
+| Encoder long press          | Open queue                     |
+| Whisplay button click       | Skip −15 s                     |
+| Whisplay button long press  | Next episode                   |
+| Whisplay button 4× click    | Sleep timer / exit             |
+
+The mapping is software-defined and will live in the Rust app's config,
+so end users can rebind without touching the hardware.
+
+### 3.5 Storage
 
 32 GB A1-rated microSD. No decision needed.
 
-### 3.5 Enclosure
+### 3.6 Enclosure
 
 3D-printed two-shell design wrapping Pi Zero 2 W + Whisplay HAT + 4000 mAh
 LiPo (cell sits beside the Pi rather than under it). Approximate envelope:
-**~75 × 40 × 25 mm** + button caps and LCD window — still pocketable.
-STLs land under `hardware/enclosure/` once the controls decision is locked.
+**~75 × 40 × 25 mm** + LCD window, encoder shaft (7 mm hole + knob),
+power switch, and access cutouts for the Whisplay's onboard button and
+microSD slot. STLs land under `hardware/enclosure/` once the first
+breadboard prototype is wired up and we know the real component clearances.
 
 ## 4. Pinout
 
@@ -155,9 +185,10 @@ schematic / device tree overlay):
 | GPIO 27                          | LCD DC                  |
 | Remaining GPIO                   | Onboard buttons + RGB LEDs |
 
-Spare GPIO available on the bottom header pins (to confirm):
-GPIO 5, 6, 12, 13, 16, 17, 23, 24, 25, 26. That's enough for a rotary
-encoder (A/B + push = 3 pins) if we choose to supplement the HAT's buttons.
+Spare GPIO (to confirm against the Whisplay schematic): GPIO 5, 6, 12, 13,
+16, 17, 23, 24, 25, 26. We claim GPIO 5 / 6 / 13 for the rotary encoder
+(A / B / push); GPIO 12, 16, 17, 23, 24, 25, 26 stay free for future
+expansion or UART debug.
 
 ## 5. Open decisions (ordered)
 
@@ -165,12 +196,12 @@ encoder (A/B + push = 3 pins) if we choose to supplement the HAT's buttons.
 2. ~~**Display**~~ — **Whisplay HAT (1.69" ST7789)**.
 3. ~~**Audio**~~ — **Whisplay HAT (WM8960 + 1 W speaker)**.
 4. ~~**Power pack**~~ — **4000 mAh LiPo + Adafruit PowerBoost 1000C**.
-5. **Controls supplement**: rely on Whisplay's onboard buttons + gestures
-   (single click / long press / 4 rapid clicks → cycle / select / exit),
-   or add a rotary encoder on the spare GPIO for proper scrubbing + volume.
-6. **Enclosure**: print fully custom STLs.
+5. ~~**Controls supplement**~~ — **EC11 rotary encoder w/ push**
+   (GPIO 5/6/13), Whisplay onboard button kept for secondary actions.
+6. **Enclosure**: STLs to be designed against the breadboard prototype.
 
-Once 5 is pinned down, we can order parts and start on the Rust software.
+All hardware decisions are now resolved. Next step: order the BOM and
+start the Rust software on a breadboarded prototype.
 
 ## 6. Bill of materials (draft)
 
@@ -183,5 +214,6 @@ Once 5 is pinned down, we can order parts and start on the Rust software.
 |  1  | Adafruit PowerBoost 1000C         |        | ~20 €  |      |
 |  1  | Polyfuse 1 A (PTC, MF-R)          |        |  ~1 €  |      |
 |  1  | Momentary tactile switch (power)  |        |        |      |
-|  1  | Rotary encoder w/ switch (optional)|       |        |      |
+|  1  | EC11 rotary encoder w/ push switch |       |  ~2 €  |      |
+|  1  | Aluminium knob, 6 mm D-shaft       |       |  ~3 €  |      |
 |  1  | Enclosure filament (PETG)         |        |        |      |
