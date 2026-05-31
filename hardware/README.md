@@ -4,19 +4,19 @@ This document is the hardware spec for the portable podcast reader. It lists
 goals, the proposed architecture, component options with tradeoffs, and the
 open decisions that still need to be made before we order parts.
 
-Everything here is a starting proposal — nothing is final. Sections marked
-**Decision needed** are the points to resolve first.
+Items marked **Decided** are settled. Items marked **Decision needed** are
+the points to resolve before ordering.
 
 ## 1. Goals and constraints
 
 | # | Goal                                   | Implication                                    |
 |---|----------------------------------------|------------------------------------------------|
 | 1 | Listen to podcasts offline             | Local storage, feed sync when online           |
-| 2 | Portable (belt-clip sized)             | Pi 4 footprint + LiPo, custom enclosure        |
+| 2 | Portable, pocketable                   | Pi Zero footprint, LiPo battery, tight case    |
 | 3 | All-day listening on one charge        | Power budget target: ≥ 10 h of playback        |
-| 4 | Usable without a phone or screen glare | Physical controls, readable display in sun     |
-| 5 | Built from off-the-shelf parts         | No custom PCB for v1; HATs + pHATs only        |
-| 6 | Hackable / modifiable                  | Expose UART and one spare GPIO header          |
+| 4 | Usable without a phone or screen glare | Physical controls, readable display indoors    |
+| 5 | Built from off-the-shelf parts         | No custom PCB for v1; HATs / pHATs only        |
+| 6 | Hackable / modifiable                  | Expose UART and any spare GPIO                 |
 
 Non-goals for v1: streaming, wireless headphones, touchscreen UI, voice
 control, a music library (it's a *podcast* player).
@@ -24,175 +24,155 @@ control, a music library (it's a *podcast* player).
 ## 2. System block diagram
 
 ```
-                      +---------------------+
-   Wi-Fi  <---------- |                     |  <----  microSD (episodes, DB)
-                      |   Raspberry Pi      |
-   Buttons (GPIO) --> |   (compute)         |  ---->  I²C display
-   Rotary enc (GPIO)->|                     |  ---->  I²S DAC --> Amp --> Speaker
-                      +----------+----------+                    \--> Headphone jack
-                                 |
-                              5 V rail
-                                 ^
-                      +----------+----------+
-   USB-C  ----------> |   Charger + boost   | <----- 3.7 V LiPo
-                      +---------------------+
+                              +-------------------+
+                              |  microSD          |
+                              |  (episodes, DB)   |
+                              +---------+---------+
+                                        |
+                              +---------v---------+
+   Wi-Fi (built-in)  <------> |  Raspberry Pi     |
+                              |  Zero 2 W         |
+                              +---------+---------+
+                                        | 40-pin header
+                              +---------v---------+
+                              |  Whisplay HAT     |
+                              |                   | --> 1.69" LCD
+                              |  ST7789 + WM8960  | --> 1 W speaker
+                              |  buttons + RGB    | --> headphone out
+                              +---------+---------+
+                                        |
+                              +---------v---------+
+   USB-C <-------------------- |  PiSugar 3 + LiPo |
+                              +-------------------+
 ```
 
-## 3. Component options
+## 3. Components
 
-### 3.1 Compute — **Decided: Raspberry Pi 4 B (2 GB)**
+### 3.1 Compute — **Decided: Raspberry Pi Zero 2 W**
 
-| Option          | Pros                                  | Cons                               |
-|-----------------|---------------------------------------|------------------------------------|
-| Pi Zero 2 W     | Tiny, low power (~0.7 W idle), cheap  | Only 512 MB RAM, slower build      |
-| **Pi 4 B (2 GB)** | Plenty of RAM and CPU, USB-C power, onboard 3.5 mm jack | Larger (85×56 mm), ~3 W idle      |
-| Pi 5 (2 GB)     | Fast, modern I/O                      | High idle draw, overkill           |
-| Radxa Zero 3W   | Pi-Zero pin-compatible, more RAM      | Less community, different OS quirks|
+| Option            | Pros                                              | Cons                                          |
+|-------------------|---------------------------------------------------|-----------------------------------------------|
+| **Pi Zero 2 W**   | Quad-core A53 (64-bit), Zero form factor, ~0.7 W  | 512 MB RAM (fine for this workload)           |
+| Pi Zero W (orig.) | Slightly lower idle, same footprint               | Single-core ARMv6, 32-bit only, Rust tier-2   |
+| Pi 4 B (2 GB)     | Lots of headroom, USB-C power                     | 85×56 mm breaks the Zero form, ~3 W idle      |
+| Pi 5              | Fast, modern                                      | Overkill, high idle draw                      |
 
-**Chosen:** Pi 4 B (2 GB). Trades pocketability and battery life for headroom
-and easier development (USB-C power, multiple USB-A for debug, gigabit
-ethernet, onboard 3.5 mm jack as a fallback before the DAC is wired up).
-The build target becomes a "belt clip" form factor rather than truly
-pocketable.
+**Chosen:** Pi Zero 2 W. Pivoted back from the Pi 4 once the Whisplay HAT
+was on the table — the HAT is built for the Zero footprint, so a Pi 4 would
+have it overhanging the carrier board with no real software benefit.
+Quad A53 + 64-bit Rust toolchain give plenty of headroom for podcast
+decoding plus UI rendering, with ~0.7 W idle.
 
-### 3.2 Audio output — **Decision needed**
+### 3.2 Display + audio + buttons — **Decided: PiSugar Whisplay HAT**
 
-The Pi's built-in audio is PWM on the Zero (no 3.5 mm jack) and generally
-noisy on all models. We need a real DAC.
+The Whisplay HAT collapses what was previously three open decisions
+(display, DAC + amp, basic controls) into a single ~50 USD board with the
+same 65×30 mm footprint as the Pi Zero.
 
-| Option                       | Interface | Notes                                |
-|------------------------------|-----------|--------------------------------------|
-| Adafruit I²S 3 W amp (MAX98357A) | I²S   | Mono, drives a speaker directly      |
-| PCM5102 I²S DAC + PAM8403 amp    | I²S   | Stereo, separate amp for speakers    |
-| HiFiBerry MiniAmp                | I²S   | Stereo, clean, larger HAT            |
-| USB DAC dongle                    | USB  | Simplest, but uses the only USB port |
+| Subsystem    | What the HAT provides                                |
+|--------------|------------------------------------------------------|
+| Display      | 1.69" IPS, 240×280, **ST7789** over SPI0 (CS0)       |
+|              | Default control pins: DC=27, RST=4, BL=22            |
+| Audio codec  | **WM8960** over I²S + I²C — mainline ALSA driver     |
+| Speaker      | Onboard 8 Ω / 1 W mono                               |
+| Headphone    | Speaker/headphone output (3.5 mm or wire-out)        |
+| Microphones  | Dual MEMS (unused for v1, kept for future projects)  |
+| Controls     | Onboard buttons (gestures: click / long / 4×rapid) + RGB LEDs |
 
-**Proposal:** PCM5102 I²S DAC feeding a 3.5 mm headphone jack, with an
-optional PAM8403 + small speaker hanging off the same DAC for loudspeaker
-mode. Trades a bit of complexity for stereo + headphone support.
+This also locks the Rust software choices:
 
-### 3.3 Display — **Decision needed**
+- Display: `mipidsi` (ST7789 driver) + `embedded-graphics` for the UI.
+- Audio: ALSA via `alsa-rs` or `cpal` — WM8960 is supported by the
+  mainline kernel driver, exposed as a standard ALSA sound card.
 
-| Option                       | Refresh     | Sunlight  | Power   | Notes                     |
-|------------------------------|-------------|-----------|---------|---------------------------|
-| SSD1306 128×64 OLED (I²C)    | Fast        | Poor-fair | Low     | Cheap, tiny UI area       |
-| SH1106 128×64 OLED (I²C/SPI) | Fast        | Poor-fair | Low     | Slightly larger modules   |
-| Waveshare 2.13" e-ink        | Seconds     | Excellent | ~0 idle | Perfect for static "now playing" |
-| 2.8" SPI TFT (ST7789)        | Fast        | Fair      | Higher  | Colour, bigger UI         |
+Caveat: if we ever pair the Whisplay with a PiSugar **S Plus** battery
+HAT, the AUTO switch must be off, otherwise the WM8960 isn't detected
+(I²C bus contention — per PiSugar docs).
 
-**Proposal:** Waveshare 2.13" e-ink. The UI is mostly static ("now playing",
-queue, progress bar), refresh rate doesn't matter, and it's readable outdoors
-with zero backlight draw. Only updates on state change.
+### 3.3 Power — **Decision needed**
 
-### 3.4 Controls — **Decision needed**
+PiSugar 3 (Zero form factor) is back in play now that we're on the Zero 2 W.
 
-Minimum set: play/pause, prev track, next track, volume -, volume +.
+| Option                          | Cells       | Notes                                |
+|---------------------------------|-------------|--------------------------------------|
+| PiSugar 3                       | 1200 mAh    | Clean Zero form fit, RTC, magnetic   |
+| Waveshare UPS HAT (B/C)         | 2× 18650    | Long runtime, chunky, header conflict|
+| Adafruit PowerBoost 1000C + LiPo| any LiPo    | Discrete, most flexible, most wiring |
 
-| Option                   | Pros                               | Cons                         |
-|--------------------------|------------------------------------|------------------------------|
-| 5 tactile buttons        | Simple, cheap, bulletproof         | More enclosure holes         |
-| 3 buttons + rotary enc.  | Scrubbing and volume feel great    | Extra GPIO + encoder library |
-| Capacitive touch pads    | No moving parts                    | Poor feel through a case     |
+Rough power budget @ 5 V on a Pi Zero 2 W + Whisplay HAT:
 
-**Proposal:** 3 buttons (prev / play-pause / next) plus one rotary encoder
-with push for volume and long-press for "mark played". Saves a button and
-makes scrubbing/volume feel right.
+| Subsystem                                   | Typical  | Notes               |
+|---------------------------------------------|----------|---------------------|
+| Pi Zero 2 W (Wi-Fi on, decoding audio)      | 250 mA   | Bursts higher       |
+| WM8960 codec + 1 W speaker at low volume    |  80 mA   | Less w/ headphones  |
+| ST7789 LCD with backlight                   |  40 mA   |                     |
+| RGB LEDs (status only, dimmed)              |   5 mA   |                     |
+| **Total (playback, speaker, Wi-Fi on)**     | **≈ 375 mA** | ~2.7 h per 1000 mAh |
+| **Total (playback, headphones, Wi-Fi off)** | **≈ 200 mA** | ~5 h per 1000 mAh   |
 
-### 3.5 Power — **Decision needed**
+PiSugar 3 1200 mAh → ~3 h on the speaker / ~6 h on headphones with Wi‑Fi
+off. To hit the all-day goal we either size up the pack (Waveshare UPS with
+2× 18650 → ~12 h) or accept "headphones + airplane mode" as the default
+listening profile and sync feeds opportunistically.
 
-Now that the Pi 4 is locked in, the PiSugar 3 (Zero form factor) is out.
-Options that fit the Pi 4 footprint:
+**Proposal:** PiSugar 3 1200 mAh for v1. It keeps the build compact and
+matches the Whisplay's form factor; we promote "Wi‑Fi off during playback"
+to a software policy (the Rust app owns it) to stretch runtime.
 
-| Option                          | Cells           | Notes                                |
-|---------------------------------|-----------------|--------------------------------------|
-| PiSugar 3 Plus                  | 5000 mAh LiPo   | Pi 4-sized, RTC, USB-C, magnetic     |
-| Waveshare UPS HAT (B)           | 2× 18650        | Chunkier, long runtime, swappable    |
-| Geekworm X728 / X1201           | 2× 18650        | Same idea, more I/O                  |
-| Adafruit PowerBoost 1000C + LiPo| any LiPo        | Discrete, most wiring, most flexible |
+### 3.4 Storage
 
-**Proposal:** PiSugar 3 Plus (5000 mAh). Cleanest mechanical fit on the Pi 4,
-RTC included so the device keeps time without a network sync, and 5000 mAh
-puts us in range of the all-day-listening goal.
+32 GB A1-rated microSD. No decision needed.
 
-Rough power budget @ 5 V on a Pi 4 B:
+### 3.5 Enclosure
 
-| Subsystem                            | Typical | Notes               |
-|--------------------------------------|---------|---------------------|
-| Pi 4 B (Wi-Fi on, idle + decoding)   | 600 mA  | ~3 W; bursts higher |
-| I²S DAC + amp at low volume          |  40 mA  |                     |
-| e-ink display                        |   1 mA  | During refresh only |
-| Buttons / encoder                    |  ~0 mA  |                     |
-| **Total (playback)**                 | **≈ 650 mA** | ~1.5 h per 1000 mAh |
+3D-printed two-shell design wrapping Pi Zero 2 W + Whisplay HAT + PiSugar 3.
+With all three in the Zero form factor the case lands around
+~70 × 35 × 22 mm + button caps — genuinely pocketable. STLs will go under
+`hardware/enclosure/` once the power pack is locked.
 
-5000 mAh ≈ 7–8 h playback with Wi‑Fi on, comfortably ≥ 10 h if we keep
-Wi‑Fi off during playback (drops the Pi to ~400 mA → 5000 mAh ≈ 12 h).
-Strategy: sync feeds + download episodes opportunistically when Wi‑Fi is on,
-then airplane-mode the radio during playback. The software (Rust) will own
-this policy.
+## 4. Pinout
 
-### 3.6 Storage
+The Whisplay HAT consumes (subject to final confirmation against the HAT
+schematic / device tree overlay):
 
-32 GB A1-rated microSD. No decision needed — cheap, plentiful, and enough
-for hundreds of episodes.
+| Bus / pin             | Use                                |
+|-----------------------|------------------------------------|
+| SPI0 (GPIO 9/10/11, CS = GPIO 8) | LCD data                |
+| I²S (GPIO 18/19/20/21)           | Audio data              |
+| I²C1 (GPIO 2/3)                  | WM8960 control          |
+| GPIO 4                           | LCD RST                 |
+| GPIO 22                          | LCD backlight enable    |
+| GPIO 27                          | LCD DC                  |
+| Remaining GPIO                   | Onboard buttons + RGB LEDs |
 
-### 3.7 Enclosure
-
-3D-printed, two-shell design with button caps and a cutout for the e-ink
-window and headphone jack. STLs live under `hardware/enclosure/` (TBD once
-the component set is locked).
-
-## 4. Proposed pinout
-
-Subject to change based on chosen DAC HAT; I²S uses fixed pins on the Pi.
-
-```
-3V3   -> OLED/e-ink VCC
-GND   -> common ground
-GPIO  2 (SDA)      -> display I²C (only if I²C display chosen)
-GPIO  3 (SCL)      -> display I²C
-GPIO 18 (PCM_CLK)  -> I²S DAC BCK       (fixed)
-GPIO 19 (PCM_FS)   -> I²S DAC LRCK      (fixed)
-GPIO 21 (PCM_DOUT) -> I²S DAC DIN       (fixed)
-GPIO 17            -> Prev button    (to GND, internal pull-up)
-GPIO 22            -> Play/Pause     (to GND, internal pull-up)
-GPIO 23            -> Next button    (to GND, internal pull-up)
-GPIO  5            -> Rotary encoder A
-GPIO  6            -> Rotary encoder B
-GPIO 13            -> Rotary encoder push
-GPIO 24, 25        -> reserved / spare header
-```
-
-If we pick the Waveshare 2.13" e-ink, it uses SPI0 + a handful of control
-lines (CS=8, DC=25, RST=17, BUSY=24) — note the collision with GPIO 17/25
-above, which would bump the Prev button to GPIO 27 and reclaim 25 for e-ink
-DC. Will be finalised once the display is locked.
+Spare GPIO available on the bottom header pins (to confirm):
+GPIO 5, 6, 12, 13, 16, 17, 23, 24, 25, 26. That's enough for a rotary
+encoder (A/B + push = 3 pins) if we choose to supplement the HAT's buttons.
 
 ## 5. Open decisions (ordered)
 
-1. ~~**Compute**~~ — **Pi 4 B (2 GB)**.
-2. **Power pack**: PiSugar 3 Plus 5000 mAh vs Waveshare UPS HAT with 2×
-   18650s. Trades single-piece neatness for longer / swappable runtime.
-3. **Display**: e-ink (outdoor-friendly, static UI) vs OLED (cheap, small).
-4. **Controls**: 5 buttons vs 3 buttons + rotary encoder.
-5. **Audio**: integrated I²S amp (mono speaker) vs DAC + headphone jack
-   (+ optional amp/speaker). The Pi 4's onboard 3.5 mm jack is usable for
-   bring-up before any DAC arrives.
-6. **Enclosure**: off-the-shelf Pi 4 case we modify vs fully custom print.
+1. ~~**Compute**~~ — **Pi Zero 2 W**.
+2. ~~**Display**~~ — **Whisplay HAT (1.69" ST7789)**.
+3. ~~**Audio**~~ — **Whisplay HAT (WM8960 + 1 W speaker)**.
+4. **Power pack**: PiSugar 3 1200 mAh (compact) vs Waveshare UPS HAT
+   (longer life, conflicts with Whisplay on the 40-pin header, needs
+   stacking pins or pogo wiring).
+5. **Controls supplement**: rely on Whisplay's onboard buttons + gestures
+   (single click / long press / 4 rapid clicks → cycle / select / exit),
+   or add a rotary encoder on the spare GPIO for proper scrubbing + volume.
+6. **Enclosure**: print fully custom STLs, or adapt the existing PiSugar +
+   Whisplay sandwich case if PiSugar publishes one.
 
-Once 2–5 are pinned down, we can order parts and start on the Rust software.
+Once 4 and 5 are pinned down, we can order parts and start on the Rust
+software.
 
 ## 6. Bill of materials (draft)
 
-Fill in once decisions above are made. Placeholder structure:
-
-| Qty | Part                        | Vendor | Price | Link |
-|-----|-----------------------------|--------|-------|------|
-|  1  | Raspberry Pi 4 B (2 GB)     |        |       |      |
-|  1  | microSD 32 GB A1            |        |       |      |
-|  1  | PiSugar 3 Plus 5000 mAh     |        |       |      |
-|  1  | PCM5102 I²S DAC module      |        |       |      |
-|  1  | 3.5 mm stereo jack PCB      |        |       |      |
-|  1  | Waveshare 2.13" e-ink       |        |       |      |
-|  3  | 6×6 mm tactile buttons      |        |       |      |
-|  1  | Rotary encoder with switch  |        |       |      |
-|  1  | Enclosure filament (PETG)   |        |       |      |
+| Qty | Part                              | Vendor | Price  | Link |
+|-----|-----------------------------------|--------|--------|------|
+|  1  | Raspberry Pi Zero 2 W             |        |        |      |
+|  1  | PiSugar Whisplay HAT              |        | ~50 €  |      |
+|  1  | microSD 32 GB A1                  |        |        |      |
+|  1  | PiSugar 3 1200 mAh (or UPS HAT)   |        |        |      |
+|  1  | Rotary encoder w/ switch (optional)|       |        |      |
+|  1  | Enclosure filament (PETG)         |        |        |      |
