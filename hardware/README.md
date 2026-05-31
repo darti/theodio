@@ -164,11 +164,14 @@ so end users can rebind without touching the hardware.
 ### 3.6 Enclosure
 
 3D-printed two-shell design wrapping Pi Zero 2 W + Whisplay HAT + 4000 mAh
-LiPo (cell sits beside the Pi rather than under it). Approximate envelope:
-**~75 × 40 × 25 mm** + LCD window, encoder shaft (7 mm hole + knob),
-power switch, and access cutouts for the Whisplay's onboard button and
-microSD slot. STLs land under `hardware/enclosure/` once the first
-breadboard prototype is wired up and we know the real component clearances.
+LiPo. Parametric source in [`hardware/enclosure/enclosure.scad`](enclosure/).
+Internal stack: LiPo + PowerBoost on the floor, Pi on standoffs ~12 mm
+above (clears USB / HDMI / TV-out), Whisplay HAT on the GPIO stacking
+header above the Pi, LCD facing up through the top shell. Realistic
+envelope at v0 parameters: **~75 × 65 × 42 mm** — bigger than the earlier
+placeholder, dominated by the LiPo's 60 × 70 × 8 mm footprint, but still
+pocketable. Cutouts: LCD window, encoder shaft + knob, power switch,
+headphone jack, microSD slot, Whisplay onboard button.
 
 ## 4. Pinout
 

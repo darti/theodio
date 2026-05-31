@@ -13,3 +13,7 @@ theodio.db
 
 .pytest_cache/
 .ruff_cache/
+
+hardware/enclosure/*.stl
+hardware/enclosure/*.3mf
+
