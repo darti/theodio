@@ -102,12 +102,16 @@ efficiency, on the consumption profile in the table below):
 | **PowerBoost 1000C + 4000 mAh LiPo** | 4000 mAh | **~12 h**  | Keeps Zero footprint, more wiring    |
 | Waveshare UPS HAT (B/C) or 2×18650 | ~6800 mAh | ~20 h         | Bulky, breaks pocketability          |
 
-**Chosen:** Adafruit PowerBoost 1000C feeding off a 50 × 60 × 8 mm flat LiPo
-(~4000 mAh). Hits the ≥ 10 h playback goal, keeps the Pi Zero footprint
-intact (only the case gets ~5 mm thicker), and the build is fully under our
-control (charger, boost, load switch). We lose the PiSugar's built-in RTC
-and power button polish — RTC is replaced by an NTP sync at boot, and a
-discrete momentary tactile switch handles power on/off.
+**Chosen:** Adafruit PowerBoost 1000C feeding off a ~60 × 70 × 8 mm flat
+LiPo (4000 mAh, single cell with built-in PCM, JST-PH 2.0). Hits the ≥ 10 h
+playback goal, and the build is fully under our control (charger, boost,
+load switch). The cell sits next to the Pi rather than directly under it,
+which pushes the case envelope to ~75 × 40 × 25 mm — still pocketable.
+
+We lose the PiSugar's built-in RTC and power button polish: RTC is
+replaced by an NTP sync at boot, and a discrete momentary tactile switch
+handles power on/off. A 1 A polyfuse in series with the LiPo + acts as a
+second-line protection on top of the cell's PCM.
 
 Realistic power budget @ 5 V on a Pi Zero 2 W + Whisplay HAT:
 
@@ -131,10 +135,10 @@ mode of use anyway (commute, walks, etc.).
 
 ### 3.5 Enclosure
 
-3D-printed two-shell design wrapping Pi Zero 2 W + Whisplay HAT + LiPo
-underneath. Approximate envelope: **~70 × 35 × 25 mm** + button caps and
-LCD window — pocketable. STLs land under `hardware/enclosure/` once the
-controls decision is locked.
+3D-printed two-shell design wrapping Pi Zero 2 W + Whisplay HAT + 4000 mAh
+LiPo (cell sits beside the Pi rather than under it). Approximate envelope:
+**~75 × 40 × 25 mm** + button caps and LCD window — still pocketable.
+STLs land under `hardware/enclosure/` once the controls decision is locked.
 
 ## 4. Pinout
 
@@ -175,8 +179,9 @@ Once 5 is pinned down, we can order parts and start on the Rust software.
 |  1  | Raspberry Pi Zero 2 W             |        |        |      |
 |  1  | PiSugar Whisplay HAT              |        | ~50 €  |      |
 |  1  | microSD 32 GB A1                  |        |        |      |
-|  1  | LiPo 4000 mAh (≤ 50×60×8 mm, 3.7 V) |      |        |      |
+|  1  | LiPo 4000 mAh (≈ 60×70×8 mm, 3.7 V, PCM, JST-PH) |  | ~25 €  |      |
 |  1  | Adafruit PowerBoost 1000C         |        | ~20 €  |      |
+|  1  | Polyfuse 1 A (PTC, MF-R)          |        |  ~1 €  |      |
 |  1  | Momentary tactile switch (power)  |        |        |      |
 |  1  | Rotary encoder w/ switch (optional)|       |        |      |
 |  1  | Enclosure filament (PETG)         |        |        |      |
