@@ -12,7 +12,7 @@ Everything here is a starting proposal — nothing is final. Sections marked
 | # | Goal                                   | Implication                                    |
 |---|----------------------------------------|------------------------------------------------|
 | 1 | Listen to podcasts offline             | Local storage, feed sync when online           |
-| 2 | Portable, pocketable                   | Small PCB footprint, LiPo battery, enclosure   |
+| 2 | Portable (belt-clip sized)             | Pi 4 footprint + LiPo, custom enclosure        |
 | 3 | All-day listening on one charge        | Power budget target: ≥ 10 h of playback        |
 | 4 | Usable without a phone or screen glare | Physical controls, readable display in sun     |
 | 5 | Built from off-the-shelf parts         | No custom PCB for v1; HATs + pHATs only        |
@@ -40,17 +40,20 @@ control, a music library (it's a *podcast* player).
 
 ## 3. Component options
 
-### 3.1 Compute — **Decision needed**
+### 3.1 Compute — **Decided: Raspberry Pi 4 B (2 GB)**
 
 | Option          | Pros                                  | Cons                               |
 |-----------------|---------------------------------------|------------------------------------|
 | Pi Zero 2 W     | Tiny, low power (~0.7 W idle), cheap  | Only 512 MB RAM, slower build      |
-| Pi 4 B (2 GB)   | Plenty of RAM and CPU                 | Larger, ~3 W idle, shorter battery |
+| **Pi 4 B (2 GB)** | Plenty of RAM and CPU, USB-C power, onboard 3.5 mm jack | Larger (85×56 mm), ~3 W idle      |
 | Pi 5 (2 GB)     | Fast, modern I/O                      | High idle draw, overkill           |
 | Radxa Zero 3W   | Pi-Zero pin-compatible, more RAM      | Less community, different OS quirks|
 
-**Proposal:** Pi Zero 2 W. Podcast playback is trivially light, and battery
-life dominates — a Pi 4/5 would halve runtime without any user-visible gain.
+**Chosen:** Pi 4 B (2 GB). Trades pocketability and battery life for headroom
+and easier development (USB-C power, multiple USB-A for debug, gigabit
+ethernet, onboard 3.5 mm jack as a fallback before the DAC is wired up).
+The build target becomes a "belt clip" form factor rather than truly
+pocketable.
 
 ### 3.2 Audio output — **Decision needed**
 
@@ -97,29 +100,35 @@ makes scrubbing/volume feel right.
 
 ### 3.5 Power — **Decision needed**
 
-| Option                        | Notes                                          |
-|-------------------------------|------------------------------------------------|
-| PiSugar 3 (Zero form factor)  | All-in-one: LiPo + charger + RTC, magnetic     |
-| Waveshare UPS HAT (B)         | 18650 cells, chunkier, long runtime            |
-| Adafruit PowerBoost 1000C     | Discrete: pair with a raw LiPo, more wiring    |
+Now that the Pi 4 is locked in, the PiSugar 3 (Zero form factor) is out.
+Options that fit the Pi 4 footprint:
 
-**Proposal:** PiSugar 3 (1200 mAh). Cleanest mechanical fit for the Zero 2 W,
-includes an RTC so the device knows the time without a network sync.
+| Option                          | Cells           | Notes                                |
+|---------------------------------|-----------------|--------------------------------------|
+| PiSugar 3 Plus                  | 5000 mAh LiPo   | Pi 4-sized, RTC, USB-C, magnetic     |
+| Waveshare UPS HAT (B)           | 2× 18650        | Chunkier, long runtime, swappable    |
+| Geekworm X728 / X1201           | 2× 18650        | Same idea, more I/O                  |
+| Adafruit PowerBoost 1000C + LiPo| any LiPo        | Discrete, most wiring, most flexible |
 
-Rough power budget @ 5 V:
+**Proposal:** PiSugar 3 Plus (5000 mAh). Cleanest mechanical fit on the Pi 4,
+RTC included so the device keeps time without a network sync, and 5000 mAh
+puts us in range of the all-day-listening goal.
 
-| Subsystem                        | Typical | Notes               |
-|----------------------------------|---------|---------------------|
-| Pi Zero 2 W (Wi-Fi on, decoding) | 350 mA  | Bursts higher       |
-| I²S DAC + amp at low volume      |  40 mA  |                     |
-| e-ink display                    |   1 mA  | During refresh only |
-| Buttons / encoder                |  ~0 mA  |                     |
-| **Total (playback)**             | **≈ 400 mA** | ~3 h per 1000 mAh |
+Rough power budget @ 5 V on a Pi 4 B:
 
-1200 mAh ≈ 3 h playback. That's short of the 10 h goal — we'll need either a
-larger pack (Waveshare UPS with 2× 18650 ≈ 12–15 h) or to keep Wi‑Fi off
-during playback (drops to ~150 mA → ~8 h). **This is the main open
-tradeoff.**
+| Subsystem                            | Typical | Notes               |
+|--------------------------------------|---------|---------------------|
+| Pi 4 B (Wi-Fi on, idle + decoding)   | 600 mA  | ~3 W; bursts higher |
+| I²S DAC + amp at low volume          |  40 mA  |                     |
+| e-ink display                        |   1 mA  | During refresh only |
+| Buttons / encoder                    |  ~0 mA  |                     |
+| **Total (playback)**                 | **≈ 650 mA** | ~1.5 h per 1000 mAh |
+
+5000 mAh ≈ 7–8 h playback with Wi‑Fi on, comfortably ≥ 10 h if we keep
+Wi‑Fi off during playback (drops the Pi to ~400 mA → 5000 mAh ≈ 12 h).
+Strategy: sync feeds + download episodes opportunistically when Wi‑Fi is on,
+then airplane-mode the radio during playback. The software (Rust) will own
+this policy.
 
 ### 3.6 Storage
 
@@ -160,16 +169,17 @@ DC. Will be finalised once the display is locked.
 
 ## 5. Open decisions (ordered)
 
-1. **Compute**: Pi Zero 2 W vs something else.
-2. **Target battery life**: ~3 h (small pack) vs ~10 h (Waveshare UPS with
-   18650s) — drives enclosure size.
+1. ~~**Compute**~~ — **Pi 4 B (2 GB)**.
+2. **Power pack**: PiSugar 3 Plus 5000 mAh vs Waveshare UPS HAT with 2×
+   18650s. Trades single-piece neatness for longer / swappable runtime.
 3. **Display**: e-ink (outdoor-friendly, static UI) vs OLED (cheap, small).
 4. **Controls**: 5 buttons vs 3 buttons + rotary encoder.
 5. **Audio**: integrated I²S amp (mono speaker) vs DAC + headphone jack
-   (+ optional amp/speaker).
-6. **Enclosure**: off-the-shelf case we adapt, vs fully custom print.
+   (+ optional amp/speaker). The Pi 4's onboard 3.5 mm jack is usable for
+   bring-up before any DAC arrives.
+6. **Enclosure**: off-the-shelf Pi 4 case we modify vs fully custom print.
 
-Once 1–5 are pinned down, we can order parts and start on the Rust software.
+Once 2–5 are pinned down, we can order parts and start on the Rust software.
 
 ## 6. Bill of materials (draft)
 
@@ -177,9 +187,9 @@ Fill in once decisions above are made. Placeholder structure:
 
 | Qty | Part                        | Vendor | Price | Link |
 |-----|-----------------------------|--------|-------|------|
-|  1  | Raspberry Pi Zero 2 W       |        |       |      |
+|  1  | Raspberry Pi 4 B (2 GB)     |        |       |      |
 |  1  | microSD 32 GB A1            |        |       |      |
-|  1  | PiSugar 3 1200 mAh          |        |       |      |
+|  1  | PiSugar 3 Plus 5000 mAh     |        |       |      |
 |  1  | PCM5102 I²S DAC module      |        |       |      |
 |  1  | 3.5 mm stereo jack PCB      |        |       |      |
 |  1  | Waveshare 2.13" e-ink       |        |       |      |
