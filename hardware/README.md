@@ -42,7 +42,8 @@ control, a music library (it's a *podcast* player).
                               +---------+---------+
                                         |
                               +---------v---------+
-   USB-C <-------------------- |  PiSugar 3 + LiPo |
+   USB micro <---------------- |  PowerBoost 1000C |
+                              |  + 4000 mAh LiPo  |
                               +-------------------+
 ```
 
@@ -89,35 +90,40 @@ Caveat: if we ever pair the Whisplay with a PiSugar **S Plus** battery
 HAT, the AUTO switch must be off, otherwise the WM8960 isn't detected
 (I²C bus contention — per PiSugar docs).
 
-### 3.3 Power — **Decision needed**
+### 3.3 Power — **Decided: 4000 mAh LiPo + Adafruit PowerBoost 1000C**
 
-PiSugar 3 (Zero form factor) is back in play now that we're on the Zero 2 W.
+Options considered, with realistic runtime (LiPo → 5 V boost at ~85 %
+efficiency, on the consumption profile in the table below):
 
-| Option                          | Cells       | Notes                                |
-|---------------------------------|-------------|--------------------------------------|
-| PiSugar 3                       | 1200 mAh    | Clean Zero form fit, RTC, magnetic   |
-| Waveshare UPS HAT (B/C)         | 2× 18650    | Long runtime, chunky, header conflict|
-| Adafruit PowerBoost 1000C + LiPo| any LiPo    | Discrete, most flexible, most wiring |
+| Option                          | Cells       | HP, Wi-Fi off | Notes                                |
+|---------------------------------|-------------|---------------|--------------------------------------|
+| PiSugar 3                       | 1200 mAh    | ~3.5 h        | Clean Zero form fit, RTC, magnetic   |
+| PiSugar 3 Plus                  | 5000 mAh    | ~14 h         | Pi 4 footprint — overhangs the Zero  |
+| **PowerBoost 1000C + 4000 mAh LiPo** | 4000 mAh | **~12 h**  | Keeps Zero footprint, more wiring    |
+| Waveshare UPS HAT (B/C) or 2×18650 | ~6800 mAh | ~20 h         | Bulky, breaks pocketability          |
 
-Rough power budget @ 5 V on a Pi Zero 2 W + Whisplay HAT:
+**Chosen:** Adafruit PowerBoost 1000C feeding off a 50 × 60 × 8 mm flat LiPo
+(~4000 mAh). Hits the ≥ 10 h playback goal, keeps the Pi Zero footprint
+intact (only the case gets ~5 mm thicker), and the build is fully under our
+control (charger, boost, load switch). We lose the PiSugar's built-in RTC
+and power button polish — RTC is replaced by an NTP sync at boot, and a
+discrete momentary tactile switch handles power on/off.
+
+Realistic power budget @ 5 V on a Pi Zero 2 W + Whisplay HAT:
 
 | Subsystem                                   | Typical  | Notes               |
 |---------------------------------------------|----------|---------------------|
 | Pi Zero 2 W (Wi-Fi on, decoding audio)      | 250 mA   | Bursts higher       |
-| WM8960 codec + 1 W speaker at low volume    |  80 mA   | Less w/ headphones  |
+| Pi Zero 2 W (Wi-Fi off, decoding audio)     | 150 mA   |                     |
+| WM8960 codec + 1 W speaker at low volume    |  80 mA   | ~30 mA on headphones |
 | ST7789 LCD with backlight                   |  40 mA   |                     |
 | RGB LEDs (status only, dimmed)              |   5 mA   |                     |
-| **Total (playback, speaker, Wi-Fi on)**     | **≈ 375 mA** | ~2.7 h per 1000 mAh |
-| **Total (playback, headphones, Wi-Fi off)** | **≈ 200 mA** | ~5 h per 1000 mAh   |
+| **Total (playback, speaker, Wi-Fi on)**     | **≈ 375 mA → 1.9 W** | ~6.5 h on 4000 mAh |
+| **Total (playback, headphones, Wi-Fi off)** | **≈ 225 mA → 1.1 W** | **~12 h on 4000 mAh** |
 
-PiSugar 3 1200 mAh → ~3 h on the speaker / ~6 h on headphones with Wi‑Fi
-off. To hit the all-day goal we either size up the pack (Waveshare UPS with
-2× 18650 → ~12 h) or accept "headphones + airplane mode" as the default
-listening profile and sync feeds opportunistically.
-
-**Proposal:** PiSugar 3 1200 mAh for v1. It keeps the build compact and
-matches the Whisplay's form factor; we promote "Wi‑Fi off during playback"
-to a software policy (the Rust app owns it) to stretch runtime.
+To hit the all-day target reliably the software (Rust) will keep Wi‑Fi off
+during playback and sync feeds opportunistically — this is the realistic
+mode of use anyway (commute, walks, etc.).
 
 ### 3.4 Storage
 
@@ -125,10 +131,10 @@ to a software policy (the Rust app owns it) to stretch runtime.
 
 ### 3.5 Enclosure
 
-3D-printed two-shell design wrapping Pi Zero 2 W + Whisplay HAT + PiSugar 3.
-With all three in the Zero form factor the case lands around
-~70 × 35 × 22 mm + button caps — genuinely pocketable. STLs will go under
-`hardware/enclosure/` once the power pack is locked.
+3D-printed two-shell design wrapping Pi Zero 2 W + Whisplay HAT + LiPo
+underneath. Approximate envelope: **~70 × 35 × 25 mm** + button caps and
+LCD window — pocketable. STLs land under `hardware/enclosure/` once the
+controls decision is locked.
 
 ## 4. Pinout
 
@@ -154,17 +160,13 @@ encoder (A/B + push = 3 pins) if we choose to supplement the HAT's buttons.
 1. ~~**Compute**~~ — **Pi Zero 2 W**.
 2. ~~**Display**~~ — **Whisplay HAT (1.69" ST7789)**.
 3. ~~**Audio**~~ — **Whisplay HAT (WM8960 + 1 W speaker)**.
-4. **Power pack**: PiSugar 3 1200 mAh (compact) vs Waveshare UPS HAT
-   (longer life, conflicts with Whisplay on the 40-pin header, needs
-   stacking pins or pogo wiring).
+4. ~~**Power pack**~~ — **4000 mAh LiPo + Adafruit PowerBoost 1000C**.
 5. **Controls supplement**: rely on Whisplay's onboard buttons + gestures
    (single click / long press / 4 rapid clicks → cycle / select / exit),
    or add a rotary encoder on the spare GPIO for proper scrubbing + volume.
-6. **Enclosure**: print fully custom STLs, or adapt the existing PiSugar +
-   Whisplay sandwich case if PiSugar publishes one.
+6. **Enclosure**: print fully custom STLs.
 
-Once 4 and 5 are pinned down, we can order parts and start on the Rust
-software.
+Once 5 is pinned down, we can order parts and start on the Rust software.
 
 ## 6. Bill of materials (draft)
 
@@ -173,6 +175,8 @@ software.
 |  1  | Raspberry Pi Zero 2 W             |        |        |      |
 |  1  | PiSugar Whisplay HAT              |        | ~50 €  |      |
 |  1  | microSD 32 GB A1                  |        |        |      |
-|  1  | PiSugar 3 1200 mAh (or UPS HAT)   |        |        |      |
+|  1  | LiPo 4000 mAh (≤ 50×60×8 mm, 3.7 V) |      |        |      |
+|  1  | Adafruit PowerBoost 1000C         |        | ~20 €  |      |
+|  1  | Momentary tactile switch (power)  |        |        |      |
 |  1  | Rotary encoder w/ switch (optional)|       |        |      |
 |  1  | Enclosure filament (PETG)         |        |        |      |
